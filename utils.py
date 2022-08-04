@@ -37,6 +37,30 @@ def extract_dataset_dirs(dataset_path: str):
     return extracted_dirs
 
 
+class ClassLabels(object):
+    RUNNING = 0
+    CUT = 1
+
+
+class CutLabels(object):
+    # Values are in milliseconds
+    # ss:ms
+    # Start the experiment : 00:35
+    # Start running : 06:00
+    # Cut : 09:67
+    # Cut : 13:144
+    # Cut : 16:917
+    # Stop running : 20:391
+    # Stop the recording 23:714
+    start_time = 0
+    start_running = (6 * 1000)
+    first_cut = (9 * 1000) + 67
+    second_cut = (13 * 1000) + 144
+    third_cut = (16 * 1000) + 917
+    stop_running = (20 * 1000) + 391
+    stop_recording = (23 * 1000) + 714
+
+
 class DatasetSample(object):
     def __init__(self):
         self.__accelerometer_df = None
@@ -90,7 +114,7 @@ class DatasetSample(object):
         sample.__accelerometer_df = pd.read_csv(os.path.join(dir_path, "Accelerometer.csv"), sep=",")
         sample.__gyroscope_df = pd.read_csv(os.path.join(dir_path, "Gyroscope.csv"), sep=",")
         sample.__linear_acceleration_df = pd.read_csv(os.path.join(dir_path, "Linear Acceleration.csv"), sep=",")
-
+        sample.__add_labels()
         sample.__meta_device_df = pd.read_csv(os.path.join(dir_path, "meta", "device.csv"), sep=",")
         sample.__meta_time_df = pd.read_csv(os.path.join(dir_path, "meta", "time.csv"), sep=",")
         sample.__dir_path = dir_path
@@ -98,12 +122,39 @@ class DatasetSample(object):
                                         sample.gyroscope_df,
                                         sample.linear_acceleration_df],
                                        axis=1)
-        sample.__single_df_without_time = pd.concat([sample.accelerometer_df.drop('Time (s)', axis=1),
-                                                     sample.gyroscope_df.drop('Time (s)', axis=1),
-                                                     sample.linear_acceleration_df.drop('Time (s)', axis=1)],
+        sample.__single_df_without_time = pd.concat([sample.accelerometer_df.drop(['Time (s)'], axis=1),
+                                                     sample.gyroscope_df.drop(['Time (s)'], axis=1),
+                                                     sample.linear_acceleration_df.drop(['Time (s)'], axis=1)],
                                                     axis=1)
 
         return sample
+
+    @staticmethod
+    def __label_df(df, cuts):
+        df["Label"] = ClassLabels.RUNNING
+        main_df = pd.DataFrame()
+        df["Time (s)"] *= 1000
+
+        for start, end in cuts:
+            cut_df = df[(df['Time (s)'] >= start) & (df['Time (s)'] <= end)]
+            assert len(cut_df.values) > 0, "Dataframe is empty"
+            # print(f"Start : {start}, End: {end}, df size : {len(cut_df.values)}")
+            # FIXME : A value is trying to be set on a copy of a slice from a DataFrame.
+            #   Try using .loc[row_indexer,col_indexer] = value instead
+            cut_df["Label"] = ClassLabels.CUT
+
+            main_df = pd.concat([main_df, cut_df])
+        return main_df
+
+    def __add_labels(self):
+        cuts = [(CutLabels.start_running, CutLabels.first_cut),
+                (CutLabels.first_cut, CutLabels.second_cut),
+                (CutLabels.second_cut, CutLabels.third_cut),
+                (CutLabels.third_cut, CutLabels.stop_running)
+                ]
+        self.__accelerometer_df = self.__label_df(self.accelerometer_df, cuts)
+        self.__gyroscope_df = self.__label_df(self.gyroscope_df, cuts)
+        self.__linear_acceleration_df = self.__label_df(self.linear_acceleration_df, cuts)
 
 
 def load_dataset(dataset_path: str) -> List[DatasetSample]:
