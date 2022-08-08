@@ -1,19 +1,113 @@
-import numpy as np
+from __future__ import annotations
 
-from utils import load_dataset, plot_df, plt
-from preprocessing import next_cross_validation_split, \
-    standardize_data, StatMetric, transform_sample_to_stat, \
-    cut_data_into_windows, calc_metrics
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
-import os
 import datetime
-from lstm import LSTMModel, custom_lstm_model, default_callbacks
-from sklearn.svm import OneClassSVM
-import time
+import os
+from typing import List, Tuple
+
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+
+from lstm import LSTMModelWrapper
+from preprocessing import next_cross_validation_split, \
+    standardize_data, cut_data_into_windows
 from resample import print_class_distribution
-from scikit_pipelines import create_confusion_matrices_from_values
-from tensorflow import keras
-from utils import ClassLabels
+from scikit_pipelines import create_confusion_matrices_from_values, \
+    create_pdf_from_figures, Path, calc_metrics
+from utils import load_dataset
+from tensorflow.keras import layers
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+import keras.utils.np_utils
+import tensorflow as tf
+
+
+def default_callbacks(result_dir: str, model_name: str):
+    callbacks = [
+        EarlyStopping(monitor='val_loss', patience=10,
+                      restore_best_weights=True),
+        ModelCheckpoint(filepath=os.path.join(result_dir, f"model_{model_name}.h5"),
+                        save_best_only=True),
+        ReduceLROnPlateau(monitor='val_loss', factor=0.06,
+                          patience=4, min_lr=0.00001)
+    ]
+    return callbacks
+
+
+def custom_lstm_model(input_shape, model_name: str | None, learning_rate=0.0001):
+    """
+    input_shape: Input shape of the model
+
+    Custom model function which can be passed as parameter to the pipeline
+    If it is to be used in sklearn gridsearch/randomsearch additional
+    hyperparameter can be passed as arguments
+    """
+    inputs = keras.Input(shape=input_shape)
+    x = layers.LSTM(128, return_sequences=False,
+                    activation=None,
+                    kernel_regularizer=tf.keras.regularizers.L2(0.0001))(inputs)
+    x = layers.LayerNormalization()(x)
+    x = layers.Activation("tanh")(x)
+    x = layers.Dropout(0.3)(x)
+    outputs = layers.Dense(1, activation="sigmoid")(x)
+    model = keras.Model(inputs, outputs, name=model_name)
+
+    optimizer = keras.optimizers.Adam(learning_rate=learning_rate, clipnorm=1.0)
+
+    model.compile(loss="binary_crossentropy",
+                  optimizer=optimizer,
+                  metrics=["accuracy"]
+                  )
+    return model
+
+
+def create_pdfs(models_and_data: List[Tuple[LSTMModelWrapper, str, np.ndarray, np.ndarray]], results_dir: str):
+    metrics_figs = []
+    display_labels = ["running", "cut"]
+    plot_names = []
+    all_true_values = []
+    all_predictions = []
+    for model, model_name, X_Test, Y_Test in models_and_data:
+        predictions = model.predict(X_Test)
+        true_values = Y_Test.flatten()
+
+        predictions = np.apply_along_axis(lambda x: int(x > 0.50), 1, predictions)
+        print(f"Predictions : {predictions}")
+        print(f"True values : {true_values}")
+
+        accuracy, uar, prec, fscore, recall_per_class, prec_per_class, fscore_per_class = calc_metrics(true_values,
+                                                                                                       predictions)
+
+        model.metadata["accuracy"] = accuracy
+        model.metadata["recall_score"] = uar
+        model.metadata["fscore"] = fscore
+        model.metadata["recall_per_class"] = recall_per_class.tolist()
+        model.metadata["prec_per_class"] = prec_per_class.tolist()
+        model.metadata["fscore_per_class"] = fscore_per_class.tolist()
+        model.metadata["true_values"] = true_values.tolist()
+        model.metadata["predictions"] = predictions.tolist()
+
+        model.save(os.path.join(results_dir, model_name))
+
+        all_predictions.append(predictions)
+        all_true_values.append(true_values)
+
+        plot_names.append(model_name)
+
+        metrics_fig, data_values = model.get_metrics_fig()
+        metrics_figs.append(metrics_fig)
+
+    all_true_values = np.asarray(all_true_values)
+    confusion_fig, axs = create_confusion_matrices_from_values(true_values=all_true_values,
+                                                               predicted_values=all_predictions,
+                                                               plot_names=plot_names,
+                                                               display_labels=display_labels,
+                                                               normalize=None,
+                                                               show=False
+                                                               )
+    metrics_figs.append(confusion_fig)
+
+    create_pdf_from_figures(Path(results_dir, f"results_{datetime.datetime.now()}.pdf"),
+                            metrics_figs,
+                            plt_close_all=True)
 
 
 def create_sequences(df, scaler, model_name, results_dir, window_len: int, overlap: int, train: bool):
@@ -30,11 +124,7 @@ def create_sequences(df, scaler, model_name, results_dir, window_len: int, overl
 
 def run():
     dataset_samples = load_dataset("ACSS")
-    # running_samples = load_dataset("RUNNING", fixed_label=ClassLabels.RUNNING)
-    # exit()
     dataset_dfs = [x.single_df_without_time for x in dataset_samples]
-
-    # dataset_dfs += [x.single_df_without_time for x in running_samples]
 
     results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
@@ -43,8 +133,10 @@ def run():
     features_num = 9
     input_shape = (window_length, features_num)
     epochs = 100
+    models_and_data = []
+
     for train_df, test_df, validation_df in next_cross_validation_split(dataset_dfs, limit=1):
-        model_name = str(datetime.datetime.now())
+        model_name = f"LSTM_MODEL_{datetime.datetime.now()}"
 
         scaler = StandardScaler()
 
@@ -58,31 +150,31 @@ def run():
                                                        scaler, model_name, results_dir,
                                                        window_length, overlap, False)
 
+        print("Train set : ")
         print_class_distribution(train_labels)
+        print("Validation set : ")
         print_class_distribution(validation_labels)
+        print("Test set : ")
+        print_class_distribution(test_labels)
 
-        lstm_model = LSTMModel({}, custom_lstm_model(input_shape))
-        lstm_model.fit(train_sequences, train_labels, validation_sequences,
-                       validation_labels,
-                       epochs=epochs,
-                       callbacks=default_callbacks(results_dir, model_name),
-                       weighted=False
-                       )
-        # lstm_model = keras.models.load_model('resultsmodel_2022-08-04 17:50:32.313217.h5')
-        predictions = lstm_model.predict(test_sequences)
-        predictions = np.apply_along_axis(lambda x: int(x > 0.50), 1, predictions)
-        test_labels = test_labels.flatten()
-        print(predictions)
-        print("-"*100)
-        print(test_labels)
-        # predictions[0] = 0
-        # test_labels[0] = 0
-        create_confusion_matrices_from_values(true_values=[test_labels],
-                                              predicted_values=[predictions], plot_names=[model_name],
-                                              display_labels=["RUNNING", "CUT"],
-                                              show=True,
-                                              # normalize=None
-                                              )
+        model = LSTMModelWrapper(custom_lstm_model(input_shape,
+                                                   model_name=None
+                                                   ))
+
+        model.metadata["overlap"] = overlap
+        model.metadata["window_length"] = window_length
+        model.metadata["input_shape"] = input_shape
+
+        model.fit(train_sequences, train_labels, validation_sequences,
+                  validation_labels,
+                  epochs=epochs,
+                  callbacks=default_callbacks(results_dir, model_name),
+                  weighted=False
+                  )
+
+        models_and_data.append(tuple([model, model_name, test_sequences, test_labels]))
+
+    create_pdfs(models_and_data, results_dir)
 
 
 if __name__ == "__main__":

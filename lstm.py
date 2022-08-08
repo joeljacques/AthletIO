@@ -1,90 +1,48 @@
-from tensorflow.keras import layers, optimizers
-from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
-import keras.utils.np_utils
-
-import tensorflow as tf
-
-import numpy as np
-from sklearn.utils.class_weight import compute_class_weight
 import io
-import resample
-from preprocessing import standardize_data
 import os
 
-def default_callbacks(result_dir: str, model_name: str):
-    callbacks = [
-        EarlyStopping(monitor='val_loss', patience=10,
-                      restore_best_weights=True),
-        ModelCheckpoint(filepath=os.path.join(result_dir,f"model_{model_name}.h5"),
-                        save_best_only=True),
-        ReduceLROnPlateau(monitor='val_loss', factor=0.06,
-                          patience=4, min_lr=0.00001)
-    ]
-    return callbacks
+import keras.utils.np_utils
+import numpy as np
+import tensorflow as tf
+from sklearn.utils.class_weight import compute_class_weight
+import matplotlib.pyplot as plt
+import joblib
+import json
 
 
-def custom_lstm_model(input_shape, learning_rate=0.0001):
-    """
-    input_shape: Input shape of the model
-
-    Custom model function which can be passed as parameter to the pipeline
-    If it is to be used in sklearn gridsearch/randomsearch additional
-    hyperparameter can be passed as arguments
-    """
-    inputs = keras.Input(shape=input_shape)
-    x = layers.LSTM(128, return_sequences=False,
-                    activation=None,
-                    kernel_regularizer=tf.keras.regularizers.L2(0.0001))(inputs)
-    x = layers.LayerNormalization()(x)
-    x = layers.Activation("tanh")(x)
-    x = layers.Dropout(0.3)(x)
-    outputs = layers.Dense(1, activation="sigmoid")(x)
-    model = keras.Model(inputs, outputs)
-
-    optimizer = keras.optimizers.Adam(learning_rate=learning_rate, clipnorm=1.0)
-
-    model.compile(loss="binary_crossentropy",
-                  optimizer=optimizer,
-                  metrics=["accuracy"]
-                  )
-    return model
-
-
-class LSTMModel(object):
+class LSTMModelWrapper(object):
     def __init__(self,
-                 param_dict,
-                 custom_model=None
+                 custom_model: keras.Model
                  ):
         """
         Either a param dict or precompiled model can be provided
         """
-        if not custom_model:
-            input_shape = param_dict["input_shape"]  # Tuple[int, int],
-            num_classes = param_dict["num_classes"]
-            metrics = param_dict["metrics"]
-            model_name = param_dict["model_name"]
-            learning_rate = param_dict["learning_rate"]
+        self.model = custom_model
+        self.model.summary()
+        self.__metadata = {}
+        self.__model_histories = []
+        self.__epochs = []
+        self.__batch_sizes = []
 
-            self.model = keras.Sequential(
-                [
-                    layers.Input(input_shape),
-                    layers.LSTM(256, return_sequences=False,
-                                # kernel_regularizer=keras.regularizers.l2(0.001),
-                                ),
-                    layers.Dropout(0.3),
-                    layers.Dense(1 if num_classes == 2 else num_classes,
-                                 activation="sigmoid" if num_classes == 2 else "softmax"),
-                ], name=model_name,
-            )
+    @property
+    def name(self):
+        return self.model.name
 
-            optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
-            self.model.compile(loss="binary_crossentropy" if num_classes == 2 else "categorical_crossentropy",
-                               optimizer=optimizer,
-                               metrics=metrics)
-            self.model.summary()
-        else:
-            self.model = custom_model
-            self.model.summary()
+    @property
+    def metadata(self):
+        return self.__metadata
+
+    @property
+    def model_histories(self):
+        return self.__model_histories
+
+    @property
+    def epochs(self):
+        return self.__epochs
+
+    @property
+    def batch_sizes(self):
+        return self.__batch_sizes
 
     def fit(self, X_train, y_train, X_val, y_val, batch_size: int = 10,
             epochs: int = 10, shuffle=False, weighted=False, callbacks=None):
@@ -97,17 +55,26 @@ class LSTMModel(object):
         else:
             class_weight = None
 
+        self.__batch_sizes.append(batch_size)
+        self.__epochs.append(epochs)
+
         # callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
-        self.model_history = self.model.fit(X_train, y_train,
-                                            epochs=epochs,
-                                            batch_size=batch_size,
-                                            shuffle=shuffle,
-                                            validation_data=(X_val, y_val),
-                                            callbacks=callbacks,
-                                            class_weight=class_weight,
-                                            verbose=1,
-                                            use_multiprocessing=True)
-        # self.model.save("first_lstm_model.h5")
+        model_history = self.model.fit(X_train, y_train,
+                                       epochs=epochs,
+                                       batch_size=batch_size,
+                                       shuffle=shuffle,
+                                       validation_data=(X_val, y_val),
+                                       callbacks=callbacks,
+                                       class_weight=class_weight,
+                                       verbose=1,
+                                       use_multiprocessing=True)
+
+        self.__model_histories.append(model_history)
+
+        self.__metadata["epochs"] = self.epochs
+        self.__metadata["batch_sizes"] = self.batch_sizes
+        self.__metadata["iterations"] = len(self.model_histories)
+
         return self
 
     def get_model_summary(self):
@@ -120,109 +87,83 @@ class LSTMModel(object):
     def predict(self, x):
         return self.model.predict(x)
 
-    # --------------------------------------------------------------
-    # method for the model evaluation pipeline (evaluation.model_evaluation.ModelEvaluate)
+    def save(self, path: str):
+        joblib.dump(self, path, compress=True)
+        name = os.path.split(path)[-1]
+        name = f"{name}_metadata.json"
+        base_dir = os.path.dirname(path)
+        metadata_path = os.path.join(base_dir, name)
+        data_values = self.get_metrics_values()
+        for k in data_values.keys():
+            self.metadata[f"model_history_{k}"] = data_values[k]
+        with open(metadata_path, 'w+') as f:
+            json.dump(self.metadata, f, indent=4, sort_keys=True)
 
-    @staticmethod
-    def execute_for_eval(X_train, y_train, X_test, y_test, subject, parameter_dict):
-        num_classes = parameter_dict['num_classes']
-        name = parameter_dict['name']
-        custom_model_function = parameter_dict['custom_model_function']
-        oversample_until_balanced = parameter_dict['oversample_until_balanced']
-        undersample_until_balanced = parameter_dict['undersample_until_balanced']
-        window_length = parameter_dict['window_length']
-        result_path = parameter_dict['result_path']
-        metrics = parameter_dict['metrics']
-        learning_rate = parameter_dict['learning_rate']
-        batch_size = parameter_dict['batch_size']
+    @classmethod
+    def load(cls, name):
+        return joblib.load(name)
 
-        print("....................")
-        print(batch_size)
+    def get_metrics_values(self):
+        data_values = {
+            "loss": [],
+            "val_loss": [],
+            "accuracy": [],
+            "val_accuracy": []
+        }
+        losses = []
+        val_losses = []
+        accuracies = []
+        val_accuracies = []
+        # recalls = []
+        # val_recalls = []
+        for history in self.model_histories:
+            h = history.history
+            losses += h["loss"]
+            val_losses += h["val_loss"]
+            accuracies += h["accuracy"]
+            val_accuracies += h["val_accuracy"]
 
-        epochs = parameter_dict['epochs']
-        model_info = parameter_dict['model_info']
-        num_folds = parameter_dict['num_folds']
-        positive_threshold = parameter_dict['positive_threshold']
+        data_values["loss"] = losses
+        data_values["val_loss"] = val_losses
+        data_values["accuracy"] = accuracies
+        data_values["val_accuracy"] = val_accuracies
+        return data_values
 
-        # standardization
-        # scaler = Standere
-        # standardize_data(scaler,X_train,True,)
-        X_train, X_test, scaler = preprocess.standardize_data(X_train, X_test)
+    def get_metrics_fig(self):
+        data_values = self.get_metrics_values()
 
-        # resample the data
-        if oversample_until_balanced:
-            X_train, y_train = resample.oversample_sequences_until_balanced(X_train, y_train)
-        elif undersample_until_balanced:
-            X_train, y_train = resample.undersample_sequences_until_balanced(X_train, y_train)
+        losses = data_values["loss"]
+        val_losses = data_values["val_loss"]
+        accuracies = data_values["accuracy"]
+        val_accuracies = data_values["val_accuracy"]
 
-        """
-        callbacks = [
-            EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True),
-            ModelCheckpoint(filepath=result_path + f"model_{subject[:4]}.h5",
-                            save_best_only=True),
+        fig, (ax1, ax2) = plt.subplots(2, 1)
+        # make a little extra space between the subplots
+        fig.subplots_adjust(hspace=0.5)
 
-            ReduceLROnPlateau(monitor='val_loss', factor=0.06,
-                              patience=4, min_lr=0.00001)
-        ]
-        """
-        callbacks = None
+        t = list(range(len(losses)))
+        ax1.plot(t, losses)
 
-        input_shape = (window_length, X_train.shape[2])
+        t = list(range(len(val_losses)))
+        ax1.plot(t, val_losses)
 
-        param_dict = {"input_shape": input_shape,
-                      "num_classes": num_classes,
-                      "metrics": metrics,
-                      "model_name": name,
-                      "learning_rate": learning_rate}
+        # ax1.set_xlim(0, 5)
+        ax1.set_xlabel('Epoch')
+        ax1.set_ylabel('Loss')
+        ax1.legend(['train', 'validation'], loc='upper left')
+        ax1.grid(True)
 
-        # model = custom_model_function(input_shape)
-        model = None
+        t = list(range(len(accuracies)))
+        ax2.plot(t, accuracies)
 
-        model_wrapper = LSTMModel(param_dict=param_dict, custom_model=model)
-        model_wrapper.fit(X_train, y_train, X_test, y_test, batch_size, epochs, callbacks=callbacks)
+        t = list(range(len(val_accuracies)))
+        ax2.plot(t, val_accuracies)
 
-        model = model_wrapper.model
-
-        print("..............")
-        print(X_train.shape, np.array(y_train).shape, X_test.shape, np.array(y_test).shape, batch_size, epochs)
-
-        model.fit(X_train, y_train, X_test, y_test, batch_size, epochs)
-
-        preds_test = model.predict(X_test)
-        preds_test = (preds_test > positive_threshold).astype(np.int32).reshape(-1)
-
-        preds_train = model.predict(X_train)
-        preds_train = (preds_train > positive_threshold).astype(np.int32).reshape(-1)
-
-        preds_proba = model.predict(X_test)
-
-        """
-    loss_learning_curve = plot.plot_loss_learning_curve(base_lstm.model_history, subject, epochs)
-        accuracy_learning_curve = plot.plot_accuracy_learning_curve(base_lstm.model_history, subject,
-                                                                    epochs)
-
-        if not model_info.hyperparameter:
-            model_info.hyperparameter = {
-                "learning rate": learning_rate,
-                "batch size": batch_size,
-                "epochs": epochs,
-                "units": units,
-                "dropout": dropout,
-            }
-
-            model_info.vars["count"] = 0
-            model_info.preprocessing["resample"] = "no resampling"
-            model_info.architecture = model.get_model_summary()
-            model_info.vars["histories"] = [(subject, model.model_history)]
-
-        model_info.vars["count"] += 1
-        model_info.vars["histories"].append((subject, model.model_history))
-
-        if model_info.vars["count"] == num_folds-1:
-            img1 = plot.lstm_acc_lc_subplots("LSTM Accuracy Learning Curve", model_info.vars["histories"])
-            img2 = plot.lstm_loss_lc_subplots("LSTM Loss Learning Curve", model_info.vars["histories"])
-            model_info.images.append(img1)
-            model_info.images.append(img2)
-        """
-
-        return preds_test, preds_proba, preds_train, y_train
+        # ax2.set_xlim(0, 5)
+        ax2.set_xlabel('Epoch')
+        ax2.set_ylabel('Accuracy')
+        ax2.legend(['train', 'validation'], loc='upper left')
+        ax2.grid(True)
+        fig.suptitle(f"Model : {self.model.name}", fontweight="bold", fontsize=24)
+        fig.set_size_inches(20, 30)
+        return fig, data_values
