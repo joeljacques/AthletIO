@@ -8,6 +8,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
+from resample import get_class_distribution_as_str
+
 
 def get_sorted_paths_in_dir(input_dir: str):
     assert os.path.exists(input_dir)
@@ -71,9 +73,23 @@ class DatasetSample(object):
         self.__dir_path = None
         self.__single_df = None
         self.__single_df_without_time = None
+        self.__number_of_samples = 0
+        self.__duration = 0
 
     def __str__(self):
-        return f"Dataset sample : {os.path.basename(self.dir_path)}"
+        return f"Dataset sample : {self.dir_path}"
+
+    @property
+    def number_of_samples(self):
+        return self.__number_of_samples
+
+    @property
+    def duration(self):
+        return round(self.__duration, 2)
+
+    @property
+    def frequency(self):
+        return round(self.number_of_samples / self.duration, 2)
 
     @property
     def dir_path(self) -> str:
@@ -107,61 +123,89 @@ class DatasetSample(object):
     def meta_time_df(self) -> pd.DataFrame:
         return self.__meta_time_df
 
+    def get_class_distribution(self):
+        classes = self.single_df["Label"].values
+        return get_class_distribution_as_str(classes)
+
+    def print_info(self):
+        print(self)
+        print(f"Samples   : {self.number_of_samples}")
+        print(f"Duration  : {self.duration} seconds")
+        print(f"Frequency : {self.frequency} sample/second")
+        print(self.get_class_distribution())
+        print("-" * 30)
+
+    def __create_single_df(self):
+        to_drop = [self.accelerometer_df,
+                   self.gyroscope_df,
+                   self.linear_acceleration_df]
+        to_drop_len = list(map(lambda x: len(x.values), to_drop))
+
+        to_keep_idx = np.argmax(to_drop_len)
+        dfs = []
+        for idx, df in enumerate(to_drop):
+            if idx == to_keep_idx:
+                dfs.append(df)
+            else:
+                dfs.append(df.drop(['Time (s)'], axis=1))
+
+        return pd.concat(dfs, axis=1)
+
     @classmethod
-    def load(cls, dir_path: str):
+    def load(cls, dir_path: str, fixed_label: int):
         sample = cls()
         assert os.path.isdir(dir_path), f"The path : {dir_path} is not a directory"
         sample.__accelerometer_df = pd.read_csv(os.path.join(dir_path, "Accelerometer.csv"), sep=",")
         sample.__gyroscope_df = pd.read_csv(os.path.join(dir_path, "Gyroscope.csv"), sep=",")
         sample.__linear_acceleration_df = pd.read_csv(os.path.join(dir_path, "Linear Acceleration.csv"), sep=",")
-        sample.__add_labels()
+        sample.__single_df = sample.__create_single_df()
+        sample.__add_labels(fixed_label)
+
         sample.__meta_device_df = pd.read_csv(os.path.join(dir_path, "meta", "device.csv"), sep=",")
         sample.__meta_time_df = pd.read_csv(os.path.join(dir_path, "meta", "time.csv"), sep=",")
         sample.__dir_path = dir_path
-        sample.__single_df = pd.concat([sample.accelerometer_df,
-                                        sample.gyroscope_df,
-                                        sample.linear_acceleration_df],
-                                       axis=1)
-        sample.__single_df_without_time = pd.concat([sample.accelerometer_df.drop(['Time (s)'], axis=1),
-                                                     sample.gyroscope_df.drop(['Time (s)'], axis=1),
-                                                     sample.linear_acceleration_df.drop(['Time (s)'], axis=1)],
-                                                    axis=1)
+        sample.__single_df.dropna(axis=0, inplace=True)
 
+        sample.__single_df_without_time = sample.single_df.drop(['Time (s)'], axis=1)
+
+        sample.__number_of_samples = len(sample.single_df.values)
+        sample.__duration = sample.single_df["Time (s)"].max()
+        sample.__duration = sample.__duration / 1000  # Convert to seconds
+        # sample.print_info()
         return sample
 
     @staticmethod
-    def __label_df(df, cuts):
+    def __label_df(df, cuts: list, fixed_label: int):
+        if fixed_label is not None:
+            df["Label"] = fixed_label
+            df["Time (s)"] *= 1000  # Convert to milliseconds
+            return df
         df["Label"] = ClassLabels.RUNNING
-        main_df = pd.DataFrame()
-        df["Time (s)"] *= 1000
+        df["Time (s)"] *= 1000  # Convert to milliseconds
 
         for start, end in cuts:
             cut_df = df[(df['Time (s)'] >= start) & (df['Time (s)'] <= end)]
             assert len(cut_df.values) > 0, "Dataframe is empty"
             # print(f"Start : {start}, End: {end}, df size : {len(cut_df.values)}")
-            # FIXME : A value is trying to be set on a copy of a slice from a DataFrame.
-            #   Try using .loc[row_indexer,col_indexer] = value instead
-            cut_df["Label"] = ClassLabels.CUT
 
-            main_df = pd.concat([main_df, cut_df])
-        return main_df
+            df.loc[cut_df.index.values.tolist(), "Label"] = ClassLabels.CUT
 
-    def __add_labels(self):
+        return df
+
+    def __add_labels(self, fixed_label: int = None):
         cuts = [(CutLabels.start_running, CutLabels.first_cut),
                 (CutLabels.first_cut, CutLabels.second_cut),
                 (CutLabels.second_cut, CutLabels.third_cut),
                 (CutLabels.third_cut, CutLabels.stop_running)
                 ]
-        self.__accelerometer_df = self.__label_df(self.accelerometer_df, cuts)
-        self.__gyroscope_df = self.__label_df(self.gyroscope_df, cuts)
-        self.__linear_acceleration_df = self.__label_df(self.linear_acceleration_df, cuts)
+        self.__single_df = self.__label_df(self.single_df, cuts, fixed_label)
 
 
-def load_dataset(dataset_path: str) -> List[DatasetSample]:
+def load_dataset(dataset_path: str, fixed_label: int = None) -> List[DatasetSample]:
     samples_dirs = extract_dataset_dirs(dataset_path)
     dataset = []
     for sample_dir in samples_dirs:
-        dataset.append(DatasetSample.load(sample_dir))
+        dataset.append(DatasetSample.load(sample_dir, fixed_label))
     return dataset
 
 

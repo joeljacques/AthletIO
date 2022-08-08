@@ -147,8 +147,10 @@ def transform_sample_to_stat(X, metrics, feature_names=None):
     return np.array(X_), labels
 
 
-def remove_nan_values(a: np.ndarray) -> np.ndarray:
-    return a[~np.isnan(a).any(axis=1)]
+# def remove_nan_values(a: np.ndarray) -> np.ndarray:
+#     if len(a.shape) == 1:
+#         return a[~np.isnan(a).any()]
+#     return a[~np.isnan(a).any(axis=1)]
 
 
 def standardize_data(scaler: StandardScaler, X_data: np.ndarray,

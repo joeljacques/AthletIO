@@ -9,14 +9,13 @@ from sklearn.utils.class_weight import compute_class_weight
 import io
 import resample
 from preprocessing import standardize_data
-
+import os
 
 def default_callbacks(result_dir: str, model_name: str):
     callbacks = [
         EarlyStopping(monitor='val_loss', patience=10,
                       restore_best_weights=True),
-        ModelCheckpoint(filepath=result_dir + \
-                                 f"model_{model_name}.h5",
+        ModelCheckpoint(filepath=os.path.join(result_dir,f"model_{model_name}.h5"),
                         save_best_only=True),
         ReduceLROnPlateau(monitor='val_loss', factor=0.06,
                           patience=4, min_lr=0.00001)
@@ -88,9 +87,9 @@ class LSTMModel(object):
             self.model.summary()
 
     def fit(self, X_train, y_train, X_val, y_val, batch_size: int = 10,
-            epochs: int = 10, shuffle=True, weighted=False, callbacks=None):
+            epochs: int = 10, shuffle=False, weighted=False, callbacks=None):
 
-        if weighted == True:
+        if weighted:
             class_weight = compute_class_weight("balanced",
                                                 classes=np.unique(y_train),
                                                 y=y_train)
