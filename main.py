@@ -6,10 +6,13 @@ from typing import List, Tuple
 
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-
+from sklearn.linear_model import SGDClassifier
+from sklearn.pipeline import make_pipeline
+import pandas as pd
+import scipy
 from lstm import LSTMModelWrapper
 from preprocessing import next_cross_validation_split, \
-    standardize_data, cut_data_into_windows
+    standardize_data, cut_data_into_windows, extract_features
 from resample import print_class_distribution
 from scikit_pipelines import create_confusion_matrices_from_values, \
     create_pdf_from_figures, Path, calc_metrics
@@ -18,6 +21,7 @@ from tensorflow.keras import layers
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 import keras.utils.np_utils
 import tensorflow as tf
+from sklearn import svm, metrics
 
 
 def default_callbacks(result_dir: str, model_name: str):
@@ -110,17 +114,70 @@ def create_pdfs(models_and_data: List[Tuple[LSTMModelWrapper, str, np.ndarray, n
                             plt_close_all=True)
 
 
-def create_sequences(df, scaler, model_name, results_dir, window_len: int, overlap: int, train: bool):
-    X_data, Y_data = df.loc[:, df.columns != 'Label'].values, df["Label"].values
-    X_data = standardize_data(scaler,
-                              X_data,
+def create_sequences(df, scaler, model_name, results_dir, window_len: int, overlap: int, train: bool, sgd: bool = False):
+    # X_data are the features, Y_data are the labels
+    X_data, Y_data = df.loc[:, df.columns != 'Label'].values, df["Label"]
+    sequences, labels = cut_data_into_windows(X_data, Y_data, window_len, overlap, train)
+    if sgd:
+        sequences = extract_features(sequences)
+    else:
+        sequences = standardize_data(scaler,
+                              sequences[:, :, :9],
                               train=True,
                               model_name=model_name,
                               results_dir=results_dir)
-
-    sequences, labels = cut_data_into_windows(X_data, Y_data, window_len, overlap, train)
     return sequences, labels
 
+
+def run_SGD():
+    dataset_samples = load_dataset("ACSS")
+    dataset_dfs = [x.single_df_without_time for x in dataset_samples]
+
+    results_dir = "results"
+    os.makedirs(results_dir, exist_ok=True)
+    window_length = 64
+    overlap = 30
+    features_num = 9
+    input_shape = (window_length, features_num)
+    epochs = 100
+    models_and_data = []
+
+    val_accuracies = []
+    test_accuracies = []
+    limit = 10
+
+    for train_df, test_df, validation_df in next_cross_validation_split(dataset_dfs, limit=limit):
+        model_name = f"LSTM_MODEL_{datetime.datetime.now()}"
+
+        scaler = StandardScaler()
+
+        train_sequences, train_labels = create_sequences(train_df, scaler, model_name, results_dir,
+                                                         window_length, overlap, True, sgd=True)
+
+        validation_sequences, validation_labels = create_sequences(validation_df,
+                                                                   scaler, model_name, results_dir,
+                                                                   window_length, overlap, False, sgd=True)
+        test_sequences, test_labels = create_sequences(test_df,
+                                                       scaler, model_name, results_dir,
+                                                       window_length, overlap, False, sgd=True)
+
+        train_labels = train_labels.flatten()
+        validation_labels = validation_labels.flatten()
+        test_labels = test_labels.flatten()
+
+        # clf = svm.SVC(kernel="linear")
+        clf = make_pipeline(StandardScaler(), SGDClassifier(max_iter=1000, tol=1e-2))
+
+        clf.fit(train_sequences, train_labels)
+        val_pred = clf.predict(validation_sequences)
+        test_pred = clf.predict(test_sequences)
+        val_accuracies.append(metrics.accuracy_score(validation_labels, val_pred))
+        test_accuracies.append(metrics.accuracy_score(test_labels, test_pred))
+
+
+    print(f"SGD results after {limit} iterations of cross validation")
+    print("Accuracy on test:", np.mean(test_accuracies))
+    print("Accuracy on val:", np.mean(val_accuracies))
 
 def run():
     dataset_samples = load_dataset("ACSS")
@@ -178,4 +235,5 @@ def run():
 
 
 if __name__ == "__main__":
+    run_SGD()
     run()
