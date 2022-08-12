@@ -166,3 +166,5 @@ results/
 *.h5
 RUNNING/
 CUT/
+playground.py
+paper_figures/
