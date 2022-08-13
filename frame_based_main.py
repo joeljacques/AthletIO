@@ -56,6 +56,7 @@ def run():
         train_sequences, train_labels = create_sequences(train_df,
                                                          window_length, overlap,
                                                          True)
+
         train_sequences = standardize_data(scaler, train_sequences,
                                            train=True,
                                            model_name=f"SGD_AND_RANDOM_FOREST_{count}",
@@ -83,8 +84,8 @@ def run():
             clf.fit(train_sequences, train_labels)
             test_pred = clf.predict(test_sequences)
             evaluation_results = get_evaluation_results(model_name,
-                                                        test_labels,
-                                                        test_pred,
+                                                        true_values=test_labels,
+                                                        predictions=test_pred,
                                                         loss_tol=loss_tol,
                                                         overlap=overlap,
                                                         epochs=epochs,
