@@ -77,7 +77,7 @@ def create_confusion_matrices_from_values(true_values: List[list] | np.ndarray |
 
     if count > 2 and count % 2 != 0:
         # FIXME : Bug
-        # axs[rows_count - 1, rows_count - 1].set_visible(False)
+        axs[rows_count - 1, rows_count - 1].set_visible(False)
         pass
     fig.suptitle(main_title, fontweight="bold", fontsize=24)
     if show:
