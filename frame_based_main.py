@@ -64,6 +64,10 @@ def run():
         test_sequences, test_labels = create_sequences(test_df,
                                                        window_length,
                                                        overlap, False)
+        test_sequences = standardize_data(scaler, test_sequences,
+                                          train=False,
+                                          model_name=f"SGD_AND_RANDOM_FOREST_{count}",
+                                          results_dir=results_dir)
 
         train_labels = train_labels.flatten()
 
