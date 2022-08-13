@@ -50,6 +50,9 @@ def run():
     sgd_stats_files = []
     lstm_stats_files = []
     random_forest_stats_files = []
+    boosting_stats_files = []
+    svc_stats_files = []
+    ada_stats_files = []
 
     def walk_callback(root, subdirs, files: List[str]):
         for f in files:
@@ -61,19 +64,36 @@ def run():
                     lstm_stats_files.append(f)
                 elif "random" in f.lower():
                     random_forest_stats_files.append(f)
+                elif "boosting" in f.lower():
+                    boosting_stats_files.append(f)
+                elif "ada" in f.lower():
+                    ada_stats_files.append(f)
+                elif "svc" in f.lower():
+                    svc_stats_files.append(f)
                 else:
-                    raise Exception("WTF")
+                    raise Exception(f"WTF : unknown model --> {f} ")
 
     evaluation_results.walk(walk_callback, True)
 
     sgd_stats = pd.DataFrame([json.load(open(x, "r")) for x in sgd_stats_files])
     lstm_stats = pd.DataFrame([json.load(open(x, "r")) for x in lstm_stats_files])
     random_forest_stats = pd.DataFrame([json.load(open(x, "r")) for x in random_forest_stats_files])
+
+    boosting_stats = pd.DataFrame([json.load(open(x, "r")) for x in boosting_stats_files])
+    ada_stats = pd.DataFrame([json.load(open(x, "r")) for x in ada_stats_files])
+    svm_stats = pd.DataFrame([json.load(open(x, "r")) for x in svc_stats_files])
+
     models = [("SGD", sgd_stats),
               ("RandomForest", random_forest_stats),
-              ("LSTM", lstm_stats)
+              ("LSTM", lstm_stats),
+              ("LinearSVC", svm_stats),
+              ("AdaBoostClassifier", ada_stats),
+              ("GradientBoostingClassifier", boosting_stats),
               ]
-    plot_confusion_matrix(models)
+
+    for sub_models in np.split(np.asarray(models), len(models) // 2):
+        print(len(sub_models))
+        plot_confusion_matrix(sub_models)
 
     metrics = ["accuracy", "fscore", "recall_score"]
     for metric in metrics:

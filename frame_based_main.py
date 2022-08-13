@@ -15,6 +15,10 @@ from preprocessing import standardize_data
 from scikit_pipelines import Path
 from utils import get_evaluation_results
 from utils import load_dataset
+from scikit_pipelines.plot import print_class_distribution
+from sklearn.svm import LinearSVC
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 
 
 def create_sequences(df,
@@ -33,8 +37,9 @@ def run():
 
     results_dir = "evaluation"
     os.makedirs(results_dir, exist_ok=True)
-    window_length = 64
-    overlap = 30
+    window_length = 64 * 2
+    overlap = (window_length // 2) + 30
+
     features_num = 9
     input_shape = (window_length, features_num)
     epochs = 1000
@@ -50,12 +55,16 @@ def run():
     for train_df, test_df, validation_df in next_cross_validation_split(dataset_dfs, limit=limit):
         sgd_model_name = f"SGD_MODEL_{count}"
         random_forest_model_name = f"RANDOM_FOREST_MODEL_{count}"
+        svm_model_name = F"LINEAR_SVC_MODEL_{count}"
+        ada_model_name = F"ADA_MODEL_{count}"
+        boosting_model_name = F"BOOSTING_MODEL_{count}"
 
         scaler = StandardScaler()
 
         train_sequences, train_labels = create_sequences(train_df,
                                                          window_length, overlap,
                                                          True)
+        print_class_distribution(train_labels)
 
         train_sequences = standardize_data(scaler, train_sequences,
                                            train=True,
@@ -82,7 +91,12 @@ def run():
             (random_forest_model_name, make_pipeline(scaler,
                                                      RandomForestClassifier(max_depth=max_depth,
                                                                             random_state=random_state,
-                                                                            verbose=1)))
+                                                                            verbose=1))),
+            (svm_model_name, make_pipeline(
+                scaler, LinearSVC(class_weight='balanced')
+            )),
+            (ada_model_name, make_pipeline(AdaBoostClassifier())),
+            (boosting_model_name, make_pipeline(GradientBoostingClassifier()))
         ]
         for model_name, clf in pipelines:
             clf.fit(train_sequences, train_labels)

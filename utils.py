@@ -216,10 +216,15 @@ class DatasetSample(object):
         return df
 
     def __add_labels(self, fixed_label: int = None):
-        cuts = [(CutLabels.start_running, CutLabels.first_cut),
-                (CutLabels.first_cut, CutLabels.second_cut),
-                (CutLabels.second_cut, CutLabels.third_cut),
-                (CutLabels.third_cut, CutLabels.stop_running)
+        # cuts = [(CutLabels.start_running, CutLabels.first_cut),
+        #         (CutLabels.first_cut, CutLabels.second_cut),
+        #         (CutLabels.second_cut, CutLabels.third_cut),
+        #         (CutLabels.third_cut, CutLabels.stop_running)
+        #         ]
+        #
+        cuts = [(CutLabels.first_cut - 1000, CutLabels.first_cut + 1000),
+                (CutLabels.second_cut - 1000, CutLabels.second_cut + 1000),
+                (CutLabels.third_cut - 1000, CutLabels.third_cut + 1000)
                 ]
         self.__single_df = self.__label_df(self.single_df, cuts, fixed_label)
 
