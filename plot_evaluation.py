@@ -6,6 +6,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
+plt.rcParams.update({'font.size': 20})
+
 
 def compare_models_plot(titel: str, results: np.ndarray, names: List[str]):
     print(np.asarray(results))
@@ -91,6 +93,7 @@ def run():
               ("GradientBoostingClassifier", boosting_stats),
               ]
 
+    # plot_confusion_matrix(models)
     for sub_models in np.split(np.asarray(models), len(models) // 2):
         print(len(sub_models))
         plot_confusion_matrix(sub_models)
