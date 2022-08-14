@@ -9,6 +9,6 @@ The following scripts were used to train the models:
 
 The data used to train the models are located in the folder [ACSS](./ACSS) and the evaluation results 
 are located here [evaluation](./evaluation).
-To run the evaluation run the following script:
+To evaluate the results, run the following script:
 
 - ```plot_evaluation.py```
