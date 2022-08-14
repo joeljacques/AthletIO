@@ -1,0 +1,51 @@
+{
+    "accuracy": 0.45454545454545453,
+    "creation_data": "2022-08-14 13:53:54.116432",
+    "epochs": 1000,
+    "fscore": 0.3125,
+    "fscore_per_class": [
+        0.625,
+        0.0
+    ],
+    "loss_tol": 0.01,
+    "max_depth": 2,
+    "model_name": "ADA_MODEL_5",
+    "overlap": 94,
+    "prec_per_class": [
+        0.625,
+        0.0
+    ],
+    "predictions": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0
+    ],
+    "random_state": 0,
+    "recall_per_class": [
+        0.625,
+        0.0
+    ],
+    "recall_score": 0.3125,
+    "true_values": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0
+    ],
+    "window_length": 128
+}

@@ -1,0 +1,53 @@
+{
+    "accuracy": 0.8333333333333334,
+    "creation_data": "2022-08-14 13:53:48.990617",
+    "epochs": 1000,
+    "fscore": 0.7,
+    "fscore_per_class": [
+        0.9,
+        0.5
+    ],
+    "loss_tol": 0.01,
+    "max_depth": 2,
+    "model_name": "SGD_MODEL_3",
+    "overlap": 94,
+    "prec_per_class": [
+        0.8181818181818182,
+        1.0
+    ],
+    "predictions": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+    ],
+    "random_state": 0,
+    "recall_per_class": [
+        1.0,
+        0.3333333333333333
+    ],
+    "recall_score": 0.6666666666666666,
+    "true_values": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0
+    ],
+    "window_length": 128
+}

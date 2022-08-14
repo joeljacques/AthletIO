@@ -1,0 +1,51 @@
+{
+    "accuracy": 0.7272727272727273,
+    "creation_data": "2022-08-14 13:54:00.660975",
+    "epochs": 1000,
+    "fscore": 0.6857142857142857,
+    "fscore_per_class": [
+        0.7999999999999999,
+        0.5714285714285715
+    ],
+    "loss_tol": 0.01,
+    "max_depth": 2,
+    "model_name": "LINEAR_SVC_MODEL_8",
+    "overlap": 94,
+    "prec_per_class": [
+        0.8571428571428571,
+        0.5
+    ],
+    "predictions": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        0
+    ],
+    "random_state": 0,
+    "recall_per_class": [
+        0.75,
+        0.6666666666666666
+    ],
+    "recall_score": 0.7083333333333333,
+    "true_values": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0
+    ],
+    "window_length": 128
+}

@@ -161,11 +161,8 @@ cython_debug/
 
 *.zip
 data/
-ACSS/
 results/
 *.h5
 RUNNING/
 CUT/
 playground.py
-
-evaluation/
