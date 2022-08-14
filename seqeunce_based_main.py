@@ -16,12 +16,16 @@ from preprocessing import next_cross_validation_split, \
 from resample import print_class_distribution
 from scikit_pipelines import create_confusion_matrices_from_values, \
     create_pdf_from_figures, Path, calc_metrics
-from utils import load_dataset
+from utils import load_dataset, get_evaluation_results
 from tensorflow.keras import layers
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 import keras.utils.np_utils
 import tensorflow as tf
+<<<<<<< HEAD:main.py
 from sklearn import svm, metrics
+=======
+import json
+>>>>>>> multi_models:seqeunce_based_main.py
 
 
 def default_callbacks(result_dir: str, model_name: str):
@@ -183,17 +187,18 @@ def run():
     dataset_samples = load_dataset("ACSS")
     dataset_dfs = [x.single_df_without_time for x in dataset_samples]
 
-    results_dir = "results"
+    results_dir = "evaluation"
     os.makedirs(results_dir, exist_ok=True)
-    window_length = 60 * 4  # 4 seconds
-    overlap = 0
+    window_length = 64 * 2 # 4 seconds
+    overlap = (window_length // 2) + 30
     features_num = 9
     input_shape = (window_length, features_num)
     epochs = 100
     models_and_data = []
-
-    for train_df, test_df, validation_df in next_cross_validation_split(dataset_dfs, limit=1):
-        model_name = f"LSTM_MODEL_{datetime.datetime.now()}"
+    limit = 10
+    count = 0
+    for train_df, validation_df, test_df in next_cross_validation_split(dataset_dfs, limit=limit):
+        model_name = f"LSTM_MODEL_{count}"
 
         scaler = StandardScaler()
 
@@ -228,10 +233,24 @@ def run():
                   callbacks=default_callbacks(results_dir, model_name),
                   weighted=False
                   )
+        predictions = model.predict(test_sequences)
+        predictions = np.apply_along_axis(lambda x: int(x > 0.50), 1, predictions)
 
-        models_and_data.append(tuple([model, model_name, test_sequences, test_labels]))
+        evaluation_results = get_evaluation_results(model_name,
+                                                    true_values=test_labels.flatten(),
+                                                    predictions=predictions,
+                                                    overlap=overlap,
+                                                    epochs=epochs,
+                                                    window_length=window_length,
 
-    create_pdfs(models_and_data, results_dir)
+                                                    )
+        with open(Path(results_dir, f"{model_name}.json").path, "w+") as f:
+            json.dump(evaluation_results, f, indent=4, sort_keys=True)
+
+        count += 1
+        # models_and_data.append(tuple([model, model_name, test_sequences, test_labels]))
+
+    # create_pdfs(models_and_data, results_dir)
 
 
 if __name__ == "__main__":

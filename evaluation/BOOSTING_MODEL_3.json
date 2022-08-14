@@ -1,0 +1,53 @@
+{
+    "accuracy": 0.9166666666666666,
+    "creation_data": "2022-08-14 13:53:50.728612",
+    "epochs": 1000,
+    "fscore": 0.8736842105263158,
+    "fscore_per_class": [
+        0.9473684210526316,
+        0.8
+    ],
+    "loss_tol": 0.01,
+    "max_depth": 2,
+    "model_name": "BOOSTING_MODEL_3",
+    "overlap": 94,
+    "prec_per_class": [
+        0.9,
+        1.0
+    ],
+    "predictions": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+    ],
+    "random_state": 0,
+    "recall_per_class": [
+        1.0,
+        0.6666666666666666
+    ],
+    "recall_score": 0.8333333333333333,
+    "true_values": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0
+    ],
+    "window_length": 128
+}

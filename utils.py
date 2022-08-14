@@ -9,6 +9,29 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from resample import get_class_distribution_as_str
+import datetime
+from scikit_pipelines import calc_metrics
+
+
+def get_evaluation_results(model_name, true_values, predictions, **kwargs):
+    model_results = {}
+    accuracy, uar, prec, fscore, recall_per_class, prec_per_class, fscore_per_class = calc_metrics(true_values,
+                                                                                                   predictions)
+
+    model_results["model_name"] = model_name
+    model_results["creation_data"] = str(datetime.datetime.now())
+    model_results["true_values"] = true_values
+    model_results["accuracy"] = accuracy
+    model_results["recall_score"] = uar
+    model_results["fscore"] = fscore
+    model_results["recall_per_class"] = recall_per_class.tolist()
+    model_results["prec_per_class"] = prec_per_class.tolist()
+    model_results["fscore_per_class"] = fscore_per_class.tolist()
+    model_results["true_values"] = true_values.tolist()
+    model_results["predictions"] = predictions.tolist()
+    for key in kwargs.keys():
+        model_results[key] = kwargs[key]
+    return model_results
 
 
 def get_sorted_paths_in_dir(input_dir: str):
@@ -193,10 +216,15 @@ class DatasetSample(object):
         return df
 
     def __add_labels(self, fixed_label: int = None):
-        cuts = [(CutLabels.start_running, CutLabels.first_cut),
-                (CutLabels.first_cut, CutLabels.second_cut),
-                (CutLabels.second_cut, CutLabels.third_cut),
-                (CutLabels.third_cut, CutLabels.stop_running)
+        # cuts = [(CutLabels.start_running, CutLabels.first_cut),
+        #         (CutLabels.first_cut, CutLabels.second_cut),
+        #         (CutLabels.second_cut, CutLabels.third_cut),
+        #         (CutLabels.third_cut, CutLabels.stop_running)
+        #         ]
+        #
+        cuts = [(CutLabels.first_cut - 1000, CutLabels.first_cut + 1000),
+                (CutLabels.second_cut - 1000, CutLabels.second_cut + 1000),
+                (CutLabels.third_cut - 1000, CutLabels.third_cut + 1000)
                 ]
         self.__single_df = self.__label_df(self.single_df, cuts, fixed_label)
 
