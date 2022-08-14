@@ -52,7 +52,7 @@ def run():
     loss_tol = 1e-2
     max_depth = 2
     random_state = 0
-    for train_df, test_df, validation_df in next_cross_validation_split(dataset_dfs, limit=limit):
+    for train_df, _, test_df in next_cross_validation_split(dataset_dfs, limit=limit):
         sgd_model_name = f"SGD_MODEL_{count}"
         random_forest_model_name = f"RANDOM_FOREST_MODEL_{count}"
         svm_model_name = F"LINEAR_SVC_MODEL_{count}"
@@ -64,6 +64,7 @@ def run():
         train_sequences, train_labels = create_sequences(train_df,
                                                          window_length, overlap,
                                                          True)
+        print("Train-set class-distribution : ")
         print_class_distribution(train_labels)
 
         train_sequences = standardize_data(scaler, train_sequences,
@@ -73,6 +74,9 @@ def run():
         test_sequences, test_labels = create_sequences(test_df,
                                                        window_length,
                                                        overlap, False)
+        print("Test-set class-distribution : ")
+        print_class_distribution(test_labels)
+
         test_sequences = standardize_data(scaler, test_sequences,
                                           train=False,
                                           model_name=f"SGD_AND_RANDOM_FOREST_{count}",

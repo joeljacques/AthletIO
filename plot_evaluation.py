@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 plt.rcParams.update({'font.size': 20})
-
+plt.rcParams["font.weight"] = "bold"
+plt.rcParams["axes.labelweight"] = "bold"
 
 def compare_models_plot(titel: str, results: np.ndarray, names: List[str]):
     print(np.asarray(results))
@@ -42,7 +43,7 @@ def plot_confusion_matrix(dfs: List[Tuple[str, pd.DataFrame]]):
     fig, axs = create_confusion_matrices_from_values(all_true_values,
                                                      all_predictions,
                                                      plot_names,
-                                                     ["Running", "Cut"]
+                                                     ["Not-Cut", "Cut"]
                                                      )
     return fig, axs
 
@@ -89,8 +90,8 @@ def run():
               ("RandomForest", random_forest_stats),
               ("LSTM", lstm_stats),
               ("LinearSVC", svm_stats),
-              ("AdaBoostClassifier", ada_stats),
-              ("GradientBoostingClassifier", boosting_stats),
+              ("AdaBoost", ada_stats),
+              ("GradientBoosting", boosting_stats),
               ]
 
     # plot_confusion_matrix(models)

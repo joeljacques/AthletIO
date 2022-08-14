@@ -129,15 +129,15 @@ def run():
 
     results_dir = "evaluation"
     os.makedirs(results_dir, exist_ok=True)
-    window_length = 60 * 4  # 4 seconds
-    overlap = 0
+    window_length = 64 * 2 # 4 seconds
+    overlap = (window_length // 2) + 30
     features_num = 9
     input_shape = (window_length, features_num)
     epochs = 100
     models_and_data = []
     limit = 10
     count = 0
-    for train_df, test_df, validation_df in next_cross_validation_split(dataset_dfs, limit=limit):
+    for train_df, validation_df, test_df in next_cross_validation_split(dataset_dfs, limit=limit):
         model_name = f"LSTM_MODEL_{count}"
 
         scaler = StandardScaler()
