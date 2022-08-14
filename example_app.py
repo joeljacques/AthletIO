@@ -30,10 +30,13 @@ def main(ref: str, signal: str = None, model=None, window_offset=0.2):
     else:
         # create faux example
         detections_times = [x + 1*np.random.random() for x in cuts]
-    data = np.concatenate((np.asarray(detections_times), np.asarray(cuts)))
-    print(data)
-    print(detections_times)
-    plt.eventplot(data, colors=['red', 'blue'])
+    data = np.concatenate((np.asarray([detections_times]), np.asarray([cuts])))
+    fig = plt.eventplot(data, colors=["red", "blue"], lineoffsets=0)
+    plt.xticks(np.arange(0, np.rint(data.max(axis=None))+0.2, step=0.2))
+    # plt.tight_layout()
+    plt.legend(["detection", "audio signal"], fontsize='xx-large')
+    plt.title(f"Average reaction time: {np.round((np.asarray(detections_times) - np.asarray(cuts)).mean(), 2)}s", fontsize='xx-large')
+    plt.yticks([])
     plt.ion()
     plt.show()
     plt.waitforbuttonpress()
