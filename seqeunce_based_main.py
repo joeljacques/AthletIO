@@ -21,11 +21,9 @@ from tensorflow.keras import layers
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 import keras.utils.np_utils
 import tensorflow as tf
-<<<<<<< HEAD:main.py
 from sklearn import svm, metrics
-=======
 import json
->>>>>>> multi_models:seqeunce_based_main.py
+
 
 
 def default_callbacks(result_dir: str, model_name: str):
